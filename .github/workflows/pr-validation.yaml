@@ -9,7 +9,7 @@ on:
       - master
       - main
     paths:
-      - 'charts/seedkey/**'
+      - 'templates/**'
       - '.github/workflows/pr-validation.yaml'
 
 env:
