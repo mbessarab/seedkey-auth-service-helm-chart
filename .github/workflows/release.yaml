@@ -212,9 +212,9 @@ jobs:
       - name: Update Helm repo index
         run: |
           if [ -f index.yaml ]; then
-            helm repo index . --merge index.yaml --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ./Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+            helm repo index . --merge index.yaml --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
           else
-            helm repo index . --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ./Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+            helm repo index . --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
           fi
 
       - name: Commit and push index
