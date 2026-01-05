@@ -1,0 +1,43 @@
+🔐 SeedKey has been deployed!
+
+{{- if .Values.migrations.enabled }}
+
+📦 Database Migrations:
+   Migrations job ran as a pre-install/pre-upgrade hook.
+   To check migration status:
+   kubectl get jobs -n {{ include "seedkey.namespace" . }} -l app.kubernetes.io/component=migrations
+{{- end }}
+
+{{- if .Values.authService.enabled }}
+
+🚀 Auth Service:
+   The auth service is running with {{ .Values.authService.replicaCount }} replica(s).
+   
+   To get the service URL:
+   {{- if contains "NodePort" .Values.authService.service.type }}
+   export NODE_PORT=$(kubectl get -n {{ include "seedkey.namespace" . }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "seedkey.authService.name" . }})
+   export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+   echo http://$NODE_IP:$NODE_PORT
+   {{- else if contains "LoadBalancer" .Values.authService.service.type }}
+   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+   Watch status: kubectl get svc -n {{ include "seedkey.namespace" . }} -w {{ include "seedkey.authService.name" . }}
+   {{- else }}
+   kubectl port-forward -n {{ include "seedkey.namespace" . }} svc/{{ include "seedkey.authService.name" . }} 8080:{{ .Values.authService.service.port }}
+   Then visit: http://localhost:8080
+   {{- end }}
+{{- end }}
+
+📋 Useful commands:
+   # Check deployment status
+   kubectl get pods -n {{ include "seedkey.namespace" . }}
+   
+   # View logs
+   kubectl logs -n {{ include "seedkey.namespace" . }} -l app.kubernetes.io/component=auth-service
+   
+   # Get all resources
+   kubectl get all -n {{ include "seedkey.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+📚 Documentation: https://github.com/mbessarab/seedkey-auth-service-helm-chart
+
+Thank you for using SeedKey! 🎉
+

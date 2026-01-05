@@ -1,0 +1,204 @@
+# GitHub Actions workflow for validating Pull Requests
+# Runs linting, templating, and testing on PRs
+
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+    paths:
+      - 'charts/seedkey/**'
+      - '.github/workflows/pr-validation.yaml'
+
+env:
+  HELM_VERSION: v3.14.0
+  PYTHON_VERSION: '3.11'
+  CHART_PATH: charts/seedkey
+
+jobs:
+  lint:
+    name: Lint Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Run helm lint
+        run: helm lint ${{ env.CHART_PATH }}
+
+  template:
+    name: Template Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scenario:
+          - name: "Default values"
+            values: ""
+          - name: "With Ingress"
+            values: "--set authService.ingress.enabled=true"
+          - name: "With External DB"
+            values: "--set database.useExternalService=true"
+          - name: "Without Migrations"
+            values: "--set migrations.enabled=false"
+          - name: "Existing Secrets"
+            values: "--set secrets.create=false --set secrets.existingSecret=my-secret"
+          - name: "Full Production"
+            values: "--set authService.ingress.enabled=true --set authService.replicaCount=3"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Template - ${{ matrix.scenario.name }}
+        run: |
+          helm template test-release ${{ env.CHART_PATH }} \
+            --set secrets.jwt.secret=test-secret \
+            --set secrets.database.password=test-password \
+            ${{ matrix.scenario.values }} \
+            --debug
+
+  kubeconform:
+    name: Kubernetes Schema Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kubeconform
+        run: |
+          curl -L https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate Kubernetes manifests
+        run: |
+          helm template test-release ${{ env.CHART_PATH }} \
+            --set secrets.jwt.secret=test-secret \
+            --set secrets.database.password=test-password \
+            | kubeconform -strict -summary -output json \
+            -kubernetes-version 1.29.0 \
+            -ignore-missing-schemas
+
+  chart-testing:
+    name: Chart Testing (ct)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
+      - name: Run chart-testing (lint)
+        run: ct lint --chart-dirs charts --charts ${{ env.CHART_PATH }}
+
+  version-check:
+    name: Version Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+
+      - name: Compare versions
+        run: |
+          PR_VERSION=$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
+          BASE_VERSION=$(grep '^version:' base/${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}' 2>/dev/null || echo "0.0.0")
+          
+          echo "PR version: $PR_VERSION"
+          echo "Base version: $BASE_VERSION"
+          
+          # Simple version comparison using sort -V
+          if [ "$PR_VERSION" = "$BASE_VERSION" ]; then
+            echo "::warning::Chart version has not been updated. Consider updating the version in Chart.yaml."
+          elif [ "$(printf '%s\n' "$BASE_VERSION" "$PR_VERSION" | sort -V | head -n1)" = "$PR_VERSION" ]; then
+            echo "::error::PR version ($PR_VERSION) is less than or equal to base version ($BASE_VERSION)"
+            exit 1
+          else
+            echo "::notice::Version updated from $BASE_VERSION to $PR_VERSION"
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate manifests
+        run: |
+          helm template test-release ${{ env.CHART_PATH }} \
+            --set secrets.jwt.secret=test-secret \
+            --set secrets.database.password=test-password \
+            > rendered-manifests.yaml
+
+      - name: Run Trivy scan
+        run: |
+          trivy config rendered-manifests.yaml --exit-code 0 --severity HIGH,CRITICAL
+
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check README exists
+        run: |
+          if [ ! -f README.md ]; then
+            echo "::error::README.md is missing"
+            exit 1
+          fi
+
+      - name: Check values are documented
+        run: |
+          # Check if key values are mentioned in README
+          REQUIRED_DOCS=("secrets.jwt.secret" "secrets.database" "migrations.enabled")
+          for doc in "${REQUIRED_DOCS[@]}"; do
+            if ! grep -q "$doc" README.md; then
+              echo "::warning::$doc should be documented in README.md"
+            fi
+          done

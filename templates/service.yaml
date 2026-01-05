@@ -1,0 +1,26 @@
+{{/*
+Service for auth-service
+*/}}
+{{- if .Values.authService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "seedkey.authService.name" . }}
+  namespace: {{ include "seedkey.namespace" . }}
+  labels:
+    {{- include "seedkey.authService.labels" . | nindent 4 }}
+  {{- with .Values.authService.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.authService.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.authService.service.port }}
+      targetPort: {{ .Values.authService.service.targetPort }}
+      protocol: TCP
+  selector:
+    {{- include "seedkey.authService.selectorLabels" . | nindent 4 }}
+{{- end }}
+

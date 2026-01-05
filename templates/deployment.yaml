@@ -1,0 +1,95 @@
+{{/*
+Deployment for auth-service
+*/}}
+{{- if .Values.authService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "seedkey.authService.name" . }}
+  namespace: {{ include "seedkey.namespace" . }}
+  labels:
+    {{- include "seedkey.authService.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.authService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "seedkey.authService.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "seedkey.authService.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Force pod restart when ConfigMap changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.authService.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "seedkey.authService.serviceAccountName" . }}
+      {{- include "seedkey.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.authService.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authService.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authService.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.authService.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: auth-service
+          image: {{ include "seedkey.authService.image" . }}
+          imagePullPolicy: {{ .Values.authService.image.pullPolicy }}
+          {{- with .Values.authService.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.authService.service.targetPort }}
+              protocol: TCP
+          # Load configuration from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: {{ include "seedkey.configMapName" . }}
+            {{- if .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret }}
+            {{- end }}
+          {{- with .Values.authService.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authService.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authService.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authService.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.authService.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.authService.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

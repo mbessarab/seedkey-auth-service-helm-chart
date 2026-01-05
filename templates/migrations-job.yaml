@@ -1,0 +1,68 @@
+{{/*
+Database migrations Job with Helm hooks
+Runs before auth-service deployment to ensure database schema is up to date
+*/}}
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "seedkey.migrations.name" . }}-{{ .Release.Revision }}
+  namespace: {{ include "seedkey.namespace" . }}
+  labels:
+    {{- include "seedkey.migrations.labels" . | nindent 4 }}
+  annotations:
+    # Helm hooks to run migrations before install/upgrade
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Hook weight - lower numbers run first
+    "helm.sh/hook-weight": "-5"
+    # Delete previous hook resources before creating new ones
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- with .Values.migrations.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  # Number of retries on failure
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  # Auto-cleanup after completion
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "seedkey.migrations.labels" . | nindent 8 }}
+      {{- with .Values.migrations.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: {{ .Values.migrations.restartPolicy }}
+      {{- include "seedkey.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "seedkey.authService.serviceAccountName" . }}
+      {{- with .Values.migrations.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.migrations.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrations
+          image: {{ include "seedkey.migrations.image" . }}
+          imagePullPolicy: {{ .Values.migrations.image.pullPolicy }}
+          # Load configuration from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: {{ include "seedkey.configMapName" . }}
+            {{- if .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret }}
+            {{- end }}
+          {{- with .Values.migrations.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+

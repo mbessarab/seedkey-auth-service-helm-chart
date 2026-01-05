@@ -1,0 +1,231 @@
+# Default values for SeedKey Helm Chart
+
+# -- Global settings applied to all components
+global:
+  # -- Namespace where resources will be deployed (can be overridden by helm --namespace)
+  namespace: "seedkey"
+  # -- Image pull secrets for private registries
+  imagePullSecrets: []
+  #  - name: ghcr-credentials
+
+# -- Namespace configuration
+namespace:
+  # -- Create namespace if it doesn't exist
+  create: true
+  # -- Name of the namespace (defaults to release namespace)
+  name: "seedkey"
+
+# =============================================================================
+# Auth Service Configuration
+# =============================================================================
+authService:
+  # -- Enable auth-service deployment
+  enabled: true
+
+  # -- Number of replicas for auth-service
+  replicaCount: 1
+
+  # -- Version of auth-service (overrides Chart appVersion for this component)
+  version: "v0.0.3"
+
+  image:
+    # -- Image repository
+    repository: ghcr.io/mbessarab/seedkey-auth-service
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Image tag (overrides version and Chart appVersion)
+    tag: ""
+
+  # -- Service account configuration
+  serviceAccount:
+    # -- Create service account
+    create: true
+    # -- Annotations to add to the service account
+    annotations: {}
+    # -- Service account name (generated if not set)
+    name: ""
+    # -- Automount API credentials for the service account
+    automountServiceAccountToken: false
+
+  # -- Pod annotations
+  podAnnotations: {}
+
+  # -- Pod security context
+  podSecurityContext: {}
+    # fsGroup: 1000
+
+  # -- Container security context
+  securityContext: {}
+    # runAsNonRoot: true
+    # runAsUser: 1000
+    # capabilities:
+    #   drop:
+    #     - ALL
+    # readOnlyRootFilesystem: true
+
+  # -- Service configuration
+  service:
+    # -- Service type
+    type: ClusterIP
+    # -- Service port
+    port: 80
+    # -- Target port (container port)
+    targetPort: 3000
+    # -- Annotations for the service
+    annotations: {}
+
+  # -- Resource limits and requests
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # -- Liveness probe configuration
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # -- Readiness probe configuration
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # -- Node selector
+  nodeSelector: {}
+
+  # -- Tolerations
+  tolerations: []
+
+  # -- Affinity rules
+  affinity: {}
+
+  # -- Additional environment variables
+  extraEnv: []
+  #  - name: EXTRA_VAR
+  #    value: "value"
+
+  # -- Additional volume mounts
+  extraVolumeMounts: []
+
+  # -- Additional volumes
+  extraVolumes: []
+
+# =============================================================================
+# Database Migrations Configuration
+# =============================================================================
+migrations:
+  # -- Enable database migrations
+  enabled: true
+
+  # -- Version of db-migrations (overrides Chart appVersion for this component)
+  version: "v0.0.2"
+
+  image:
+    # -- Image repository
+    repository: ghcr.io/mbessarab/seedkey-db-migrations
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Image tag (overrides version and Chart appVersion)
+    tag: ""
+
+  # -- Job backoff limit (number of retries)
+  backoffLimit: 4
+
+  # -- TTL in seconds after job completion (cleanup)
+  ttlSecondsAfterFinished: 3600
+
+  # -- Restart policy for the job pod
+  restartPolicy: OnFailure
+
+  # -- Resource limits and requests for migrations job
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  annotations: {}
+
+  podAnnotations: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+config:
+  nodeEnv: production
+  logLevel: info
+  appVersion: "0.0.1"
+
+  # Server settings
+  server:
+    port: "3000"
+    host: "0.0.0.0"
+    allowedDomains: ""
+    connectionTimeout: "30000"
+    bodyLimit: "1048576"
+
+  # Token TTL settings
+  tokens:
+    accessTokenTtl: "3600"
+    refreshTokenTtl: "2592000"
+    sessionTtl: "2592000"
+
+  # Shutdown settings
+  shutdown:
+    timeout: "30000"
+    drainDelay: "5000"
+
+  # Liquibase settings
+  liquibase:
+    logLevel: "INFO"
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+database:
+  # Connection settings
+  connection:
+    host: "postgres-db"
+    port: "5432"
+    database: "seedkey"
+    ssl: "false"
+    maxConnections: "20"
+
+# =============================================================================
+# Secrets Configuration
+# =============================================================================
+secrets:
+  # -- Existing secret name containing database credentials and JWT secret
+  # Secret must contain keys: POSTGRES_USER, POSTGRES_PASSWORD, JWT_SECRET
+  # For migrations: LIQUIBASE_COMMAND_URL, LIQUIBASE_COMMAND_USERNAME, LIQUIBASE_COMMAND_PASSWORD
+  existingSecret: ""
+
+# =============================================================================
+# Additional Configuration
+# =============================================================================
+
+# -- Common labels to add to all resources
+commonLabels: {}
+
+# -- Common annotations to add to all resources
+commonAnnotations: {}
+

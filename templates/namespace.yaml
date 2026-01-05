@@ -1,0 +1,19 @@
+{{/*
+Namespace resource (optional)
+Only created if namespace.create is true and namespace name differs from release namespace
+*/}}
+{{- if and .Values.namespace.create .Values.namespace.name }}
+{{- if ne .Values.namespace.name .Release.Namespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace.name }}
+  labels:
+    {{- include "seedkey.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+

@@ -1,0 +1,38 @@
+# SeedKey Helm Chart
+# Deploys auth-service and database migrations for SeedKey passwordless authentication
+apiVersion: v2
+name: seedkey
+description: A Helm chart for deploying SeedKey passwordless authentication system
+type: application
+
+# Chart version 
+version: 0.0.1
+
+appVersion: "0.0.1"
+
+kubeVersion: ">=1.23.0-0"
+
+maintainers:
+  - name: mbessarab
+    url: https://github.com/mbessarab
+
+keywords:
+  - authentication
+  - passwordless
+  - ed25519
+  - security
+  - seedkey
+
+home: https://github.com/mbessarab/seedkey-helm-chart
+
+sources:
+  - https://github.com/mbessarab/seedkey-auth-service
+  - https://github.com/mbessarab/seedkey-db-migrations
+
+annotations:
+  artifacthub.io/category: security
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release with auth-service and migrations
+

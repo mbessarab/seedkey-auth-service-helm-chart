@@ -1,0 +1,227 @@
+# GitHub Actions workflow for releasing Helm chart
+# Triggers on push to master/main branch and creates a new release with chart package
+
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'Chart.yaml'
+      - 'values.yaml'
+      - 'template/**'
+      - '.github/workflows/release.yaml'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even without version change'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CHART_NAME: seedkey
+  CHART_PATH: charts/seedkey
+  HELM_VERSION: v3.14.0
+
+jobs:
+  lint:
+    name: Lint Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Run helm lint
+        run: helm lint ${{ env.CHART_PATH }}
+
+      - name: Run helm template
+        run: |
+          helm template test-release ${{ env.CHART_PATH }} \
+            --set secrets.jwt.secret=test-secret \
+            --set secrets.database.password=test-password \
+            --debug
+
+  release:
+    name: Release Chart
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Get chart version
+        id: chart_version
+        run: |
+          VERSION=$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Chart version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.chart_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.chart_version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.chart_version.outputs.version }} does not exist"
+          fi
+
+      - name: Package Helm chart
+        if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
+        run: |
+          helm package ${{ env.CHART_PATH }} --destination .deploy
+          ls -la .deploy/
+
+      - name: Upload chart artifact
+        if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: .deploy/${{ env.CHART_NAME }}-${{ steps.chart_version.outputs.version }}.tgz
+
+      - name: Login to GitHub Container Registry
+        if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push chart to GHCR (OCI)
+        if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
+        run: |
+          helm push .deploy/${{ env.CHART_NAME }}-${{ steps.chart_version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.chart_version.outputs.version }}
+          name: Release v${{ steps.chart_version.outputs.version }}
+          body: |
+            ## SeedKey Helm Chart v${{ steps.chart_version.outputs.version }}
+            
+            ### Установка (OCI Registry)
+            
+            ```bash
+            # Авторизация в GitHub Container Registry
+            helm registry login ghcr.io -u $GITHUB_USERNAME -p $GITHUB_TOKEN
+            
+            # Установка чарта
+            helm install seedkey oci://ghcr.io/${{ github.repository_owner }}/${{ env.CHART_NAME }} \
+              --version ${{ steps.chart_version.outputs.version }} \
+              --namespace seedkey \
+              --create-namespace \
+              --set secrets.jwt.secret=YOUR_JWT_SECRET \
+              --set secrets.database.password=YOUR_POSTGRES_PASSWORD
+            ```
+            
+            ### Установка (GitHub Pages Helm Repo)
+            
+            ```bash
+            # Добавление репозитория
+            helm repo add seedkey https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+            helm repo update
+            
+            # Установка чарта
+            helm install seedkey seedkey/seedkey \
+              --version ${{ steps.chart_version.outputs.version }} \
+              --namespace seedkey \
+              --create-namespace
+            ```
+            
+            ### Изменения
+            
+            См. [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          files: |
+            .deploy/${{ env.CHART_NAME }}-${{ steps.chart_version.outputs.version }}.tgz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip release (tag exists)
+        if: steps.check_tag.outputs.exists == 'true' && github.event.inputs.force_release != 'true'
+        run: |
+          echo "::notice::Skipping release - tag v${{ steps.chart_version.outputs.version }} already exists"
+          echo "To force a new release, update the version in Chart.yaml or trigger the workflow manually with force_release=true"
+
+  # Update Helm repository index for GitHub Pages
+  update-index:
+    name: Update Helm Repository Index
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+        continue-on-error: true
+        id: checkout_pages
+
+      - name: Create gh-pages branch if not exists
+        if: steps.checkout_pages.outcome == 'failure'
+        run: |
+          git checkout --orphan gh-pages
+          git rm -rf .
+          echo "# SeedKey Helm Chart Repository" > README.md
+          git add README.md
+          git commit -m "Initial gh-pages branch"
+          git push origin gh-pages
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Download chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-chart
+          path: .
+
+      - name: Update Helm repo index
+        run: |
+          if [ -f index.yaml ]; then
+            helm repo index . --merge index.yaml --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+          else
+            helm repo index . --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+          fi
+
+      - name: Commit and push index
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git add index.yaml *.tgz || true
+          git commit -m "Update Helm repository index for $(ls *.tgz | head -1)" || true
+          git push origin gh-pages || true

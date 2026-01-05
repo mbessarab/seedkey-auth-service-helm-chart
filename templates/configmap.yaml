@@ -1,0 +1,48 @@
+{{/*
+ConfigMap for non-sensitive environment variables
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "seedkey.configMapName" . }}
+  namespace: {{ include "seedkey.namespace" . }}
+  labels:
+    {{- include "seedkey.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # Application settings
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  APP_VERSION: {{ .Values.config.appVersion | quote }}
+
+  # Server settings
+  PORT: {{ .Values.config.server.port | quote }}
+  HOST: {{ .Values.config.server.host | quote }}
+  {{- if .Values.config.server.allowedDomains }}
+  ALLOWED_DOMAINS: {{ .Values.config.server.allowedDomains | quote }}
+  {{- end }}
+  CONNECTION_TIMEOUT: {{ .Values.config.server.connectionTimeout | quote }}
+  BODY_LIMIT: {{ .Values.config.server.bodyLimit | quote }}
+
+  # Token TTL settings
+  ACCESS_TOKEN_TTL: {{ .Values.config.tokens.accessTokenTtl | quote }}
+  REFRESH_TOKEN_TTL: {{ .Values.config.tokens.refreshTokenTtl | quote }}
+  SESSION_TTL: {{ .Values.config.tokens.sessionTtl | quote }}
+
+  # Graceful shutdown settings
+  SHUTDOWN_TIMEOUT: {{ .Values.config.shutdown.timeout | quote }}
+  SHUTDOWN_DRAIN_DELAY: {{ .Values.config.shutdown.drainDelay | quote }}
+
+  # Database connection settings
+  POSTGRES_HOST: {{ include "seedkey.database.host" . | quote }}
+  POSTGRES_PORT: {{ .Values.database.connection.port | quote }}
+  POSTGRES_DB: {{ .Values.database.connection.database | quote }}
+  POSTGRES_SSL: {{ .Values.database.connection.ssl | quote }}
+  POSTGRES_MAX_CONNECTIONS: {{ .Values.database.connection.maxConnections | quote }}
+
+  # Liquibase settings
+  LIQUIBASE_LOG_LEVEL: {{ .Values.config.liquibase.logLevel | quote }}
+
