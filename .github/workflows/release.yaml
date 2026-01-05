@@ -1,5 +1,5 @@
 # GitHub Actions workflow for releasing Helm chart
-# Triggers on push to master/main branch and creates a new release with chart package
+# Triggers on push to main branch and creates a new release with chart package
 
 name: Release Helm Chart
 
@@ -192,11 +192,13 @@ jobs:
         if: steps.checkout_pages.outcome == 'failure'
         run: |
           git checkout --orphan gh-pages
-          git rm -rf .
+          # Make cleanup idempotent.
+          git ls-files -z | xargs -0 git rm -f || true
+          git clean -fdx || true
           echo "# SeedKey Helm Chart Repository" > README.md
           git add README.md
           git commit -m "Initial gh-pages branch"
-          git push origin gh-pages
+          git push -u origin gh-pages
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
