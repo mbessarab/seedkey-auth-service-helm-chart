@@ -1,6 +1,7 @@
-{{/*
-ConfigMap for non-sensitive environment variables
-*/}}
+{{/* 
+  ConfigMap for non-sensitive environment variables
+  Only created if configMap.existingName is not set */}}
+{{- if not .Values.configMap.existingName }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -45,4 +46,5 @@ data:
 
   # Liquibase settings
   LIQUIBASE_LOG_LEVEL: {{ .Values.config.liquibase.logLevel | quote }}
+{{- end }}
 

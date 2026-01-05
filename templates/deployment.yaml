@@ -1,6 +1,4 @@
-{{/*
-Deployment for auth-service
-*/}}
+{{/*Deployment for auth-service*/}}
 {{- if .Values.authService.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -23,8 +21,10 @@ spec:
       labels:
         {{- include "seedkey.authService.selectorLabels" . | nindent 8 }}
       annotations:
+        {{- if not .Values.configMap.existingName }}
         # Force pod restart when ConfigMap changes
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
         {{- with .Values.authService.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

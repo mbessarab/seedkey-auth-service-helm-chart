@@ -103,10 +103,14 @@ Create the name of the service account to use for auth-service
 {{- end }}
 
 {{/*
-ConfigMap name
+ConfigMap name - returns existing ConfigMap name if provided
 */}}
 {{- define "seedkey.configMapName" -}}
+{{- if .Values.configMap.existingName }}
+{{- .Values.configMap.existingName }}
+{{- else }}
 {{- printf "%s-config" (include "seedkey.fullname" .) }}
+{{- end }}
 {{- end }}
 
 {{/*

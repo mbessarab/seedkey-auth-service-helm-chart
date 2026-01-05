@@ -210,6 +210,12 @@ database:
     ssl: "false"
     maxConnections: "20"
 
+# -- ConfigMap configuration
+configMap:
+  # -- Use existing ConfigMap instead of creating one
+  # If set, the chart will use this ConfigMap and skip creating its own
+  existingName: ""
+
 # =============================================================================
 # Secrets Configuration
 # =============================================================================
