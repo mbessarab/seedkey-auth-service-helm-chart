@@ -15,7 +15,6 @@ on:
 env:
   HELM_VERSION: v3.14.0
   PYTHON_VERSION: '3.11'
-  CHART_PATH: charts/seedkey
 
 jobs:
   lint:
@@ -33,7 +32,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Run helm lint
-        run: helm lint ${{ env.CHART_PATH }}
+        run: helm lint .
 
   template:
     name: Template Validation
@@ -64,7 +63,7 @@ jobs:
 
       - name: Template - ${{ matrix.scenario.name }}
         run: |
-          helm template test-release ${{ env.CHART_PATH }} \
+          helm template test-release . \
             --set secrets.jwt.secret=test-secret \
             --set secrets.database.password=test-password \
             ${{ matrix.scenario.values }} \
@@ -89,7 +88,7 @@ jobs:
 
       - name: Validate Kubernetes manifests
         run: |
-          helm template test-release ${{ env.CHART_PATH }} \
+          helm template test-release . \
             --set secrets.jwt.secret=test-secret \
             --set secrets.database.password=test-password \
             | kubeconform -strict -summary -output json \
@@ -119,7 +118,7 @@ jobs:
         uses: helm/chart-testing-action@v2
 
       - name: Run chart-testing (lint)
-        run: ct lint --chart-dirs charts --charts ${{ env.CHART_PATH }}
+        run: ct lint --chart-dirs charts --charts .
 
   version-check:
     name: Version Check
@@ -136,8 +135,8 @@ jobs:
 
       - name: Compare versions
         run: |
-          PR_VERSION=$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
-          BASE_VERSION=$(grep '^version:' base/${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}' 2>/dev/null || echo "0.0.0")
+          PR_VERSION=$(grep '^version:' ./Chart.yaml | awk '{print $2}')
+          BASE_VERSION=$(grep '^version:' base/Chart.yaml | awk '{print $2}' 2>/dev/null || echo "0.0.0")
           
           echo "PR version: $PR_VERSION"
           echo "Base version: $BASE_VERSION"
@@ -170,7 +169,7 @@ jobs:
 
       - name: Generate manifests
         run: |
-          helm template test-release ${{ env.CHART_PATH }} \
+          helm template test-release . \
             --set secrets.jwt.secret=test-secret \
             --set secrets.database.password=test-password \
             > rendered-manifests.yaml

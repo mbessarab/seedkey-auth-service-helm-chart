@@ -23,7 +23,6 @@ on:
 
 env:
   CHART_NAME: seedkey
-  CHART_PATH: charts/seedkey
   HELM_VERSION: v3.14.0
 
 jobs:
@@ -42,11 +41,11 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Run helm lint
-        run: helm lint ${{ env.CHART_PATH }}
+        run: helm lint .
 
       - name: Run helm template
         run: |
-          helm template test-release ${{ env.CHART_PATH }} \
+          helm template test-release . \
             --set secrets.jwt.secret=test-secret \
             --set secrets.database.password=test-password \
             --debug
@@ -77,7 +76,7 @@ jobs:
       - name: Get chart version
         id: chart_version
         run: |
-          VERSION=$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
+          VERSION=$(grep '^version:' ./Chart.yaml | awk '{print $2}')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Chart version: $VERSION"
 
@@ -95,7 +94,7 @@ jobs:
       - name: Package Helm chart
         if: steps.check_tag.outputs.exists == 'false' || github.event.inputs.force_release == 'true'
         run: |
-          helm package ${{ env.CHART_PATH }} --destination .deploy
+          helm package . --destination .deploy
           ls -la .deploy/
 
       - name: Upload chart artifact
@@ -213,9 +212,9 @@ jobs:
       - name: Update Helm repo index
         run: |
           if [ -f index.yaml ]; then
-            helm repo index . --merge index.yaml --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+            helm repo index . --merge index.yaml --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ./Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
           else
-            helm repo index . --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ${{ env.CHART_PATH }}/Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
+            helm repo index . --url https://github.com/${{ github.repository }}/releases/download/v$(grep '^version:' ./Chart.yaml 2>/dev/null | awk '{print $2}' || echo "latest")
           fi
 
       - name: Commit and push index
