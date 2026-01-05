@@ -131,7 +131,7 @@ migrations:
   enabled: true
 
   # -- Version of db-migrations (overrides Chart appVersion for this component)
-  version: "v0.0.2"
+  version: "0.0.2"
 
   image:
     # -- Image repository
